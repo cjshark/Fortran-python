@@ -79,9 +79,8 @@ while running:
     else:
         frame_ms_ema = (0.9 * frame_ms_ema) + (0.1 * float(frame_ms))
     fps = clock.get_fps()
-    physics_pct = (physics_ms_ema / max(frame_ms_ema, 1e-6)) * 100.0
     pygame.display.set_caption(
-        f"chain.py | Fortran | links: {N_LINKS} | solve: {physics_ms_ema:.2f} ms | frame: {frame_ms_ema:.2f} ms | physics: {physics_pct:.0f}% | FPS: {fps:.1f}")
+        f"chain.py | Fortran | links: {N_LINKS} | solve: {physics_ms_ema:.2f} ms | frame: {frame_ms_ema:.2f} ms | FPS: {fps:.1f}")
     pygame.display.flip()
     clock.tick(TARGET_FPS)
 

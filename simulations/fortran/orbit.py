@@ -18,20 +18,23 @@ if hasattr(os, "add_dll_directory"):
 import phys_engine
 
 STRESS_MODE = True
-N_PLANETS = 4000 if STRESS_MODE else 100
+PLANET_OPTIONS = (10000, 50000, 100000)
+DEFAULT_PLANET_INDEX = 2 if STRESS_MODE else 0
 WIDTH, HEIGHT = 800, 800
 G_CONST = 5000.0
 DT = 0.1
-INITIAL_DRAW_STRIDE = 4 if STRESS_MODE else 1
 TARGET_FPS = 0  # 0 = uncapped
 
-pos = np.asfortranarray(np.zeros((2, N_PLANETS)), dtype=np.float64)
-vel = np.asfortranarray(np.zeros((2, N_PLANETS)), dtype=np.float64)
-acc = np.asfortranarray(np.zeros((2, N_PLANETS)), dtype=np.float64)
+MAX_PLANETS = max(PLANET_OPTIONS)
+pos = np.asfortranarray(np.zeros((2, MAX_PLANETS)), dtype=np.float64)
+vel = np.asfortranarray(np.zeros((2, MAX_PLANETS)), dtype=np.float64)
+acc = np.asfortranarray(np.zeros((2, MAX_PLANETS)), dtype=np.float64)
 
 
-def seed_orbits(pos_arr, vel_arr, sun_x, sun_y, gravity_const):
-    for i in range(N_PLANETS):
+def seed_orbits(pos_arr, vel_arr, sun_x, sun_y, gravity_const, count):
+    pos_arr[:, :count] = 0.0
+    vel_arr[:, :count] = 0.0
+    for i in range(count):
         r = random.uniform(100, 350)
         angle = random.uniform(0, 2 * np.pi)
         pos_arr[0, i] = sun_x + r * np.cos(angle)
@@ -42,10 +45,11 @@ def seed_orbits(pos_arr, vel_arr, sun_x, sun_y, gravity_const):
 
 
 sun_x, sun_y = float(WIDTH // 2), float(HEIGHT // 2)
-draw_stride = INITIAL_DRAW_STRIDE
+active_planets = PLANET_OPTIONS[DEFAULT_PLANET_INDEX]
 paused = False
 show_help = True
-seed_orbits(pos, vel, sun_x, sun_y, G_CONST)
+show_perf_meter = True
+seed_orbits(pos, vel, sun_x, sun_y, G_CONST, active_planets)
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -67,7 +71,7 @@ while True:
             if event.key == pygame.K_SPACE:
                 paused = not paused
             elif event.key == pygame.K_r:
-                seed_orbits(pos, vel, sun_x, sun_y, G_CONST)
+                seed_orbits(pos, vel, sun_x, sun_y, G_CONST, active_planets)
             elif event.key == pygame.K_h:
                 show_help = not show_help
             elif event.key == pygame.K_UP:
@@ -78,17 +82,27 @@ while True:
                 DT = float(np.clip(DT * 1.1, 0.005, 1.0))
             elif event.key == pygame.K_LEFT:
                 DT = float(np.clip(DT / 1.1, 0.005, 1.0))
-            elif event.key == pygame.K_PAGEUP:
-                draw_stride = min(64, draw_stride + 1)
-            elif event.key == pygame.K_PAGEDOWN:
-                draw_stride = max(1, draw_stride - 1)
+            elif event.key == pygame.K_v:
+                show_perf_meter = not show_perf_meter
+            elif event.key == pygame.K_1:
+                active_planets = PLANET_OPTIONS[0]
+                seed_orbits(pos, vel, sun_x, sun_y, G_CONST, active_planets)
+            elif event.key == pygame.K_2:
+                active_planets = PLANET_OPTIONS[1]
+                seed_orbits(pos, vel, sun_x, sun_y, G_CONST, active_planets)
+            elif event.key == pygame.K_3:
+                active_planets = PLANET_OPTIONS[2]
+                seed_orbits(pos, vel, sun_x, sun_y, G_CONST, active_planets)
 
     physics_start = time.perf_counter()
     if not paused:
+        active_pos = pos[:, :active_planets]
+        active_vel = vel[:, :active_planets]
+        active_acc = acc[:, :active_planets]
         phys_engine.apply_orbital_gravity(
-            pos=pos, acc=acc, n=N_PLANETS,
+            pos=active_pos, acc=active_acc, n=active_planets,
             sun_x=sun_x, sun_y=sun_y, gravity_const=G_CONST)
-        phys_engine.verlet_step(pos, vel, acc, DT, N_PLANETS)
+        phys_engine.verlet_step(active_pos, active_vel, active_acc, DT, active_planets)
     physics_ms = (time.perf_counter() - physics_start) * 1000.0
     if physics_ms_ema is None:
         physics_ms_ema = physics_ms
@@ -98,19 +112,38 @@ while True:
     screen.fill((5, 5, 15))
     pygame.draw.circle(screen, (255, 200, 0), (int(sun_x), int(sun_y)), 20)
 
-    for i in range(0, N_PLANETS, draw_stride):
-        px, py = int(pos[0, ic]), int(pos[1, i])
+    for i in range(active_planets):
+        px, py = int(pos[0, i]), int(pos[1, i])
         if 0 <= px < WIDTH and 0 <= py < HEIGHT:
             pygame.draw.circle(screen, (100, 200, 255), (px, py), 2)
 
     if show_help:
         help_lines = [
             "LMB: move sun | Wheel/Up/Down: gravity",
-            "Left/Right: dt | PgUp/PgDn: draw stride",
-            "Space: pause | R: reseed | H: hide help",
+            "Left/Right: dt | 1/2/3: 10k/50k/100k",
+            "Space: pause | R: reset | V: perf meter | H: hide help",
         ]
         for idx, line in enumerate(help_lines):
             screen.blit(font.render(line, True, (220, 220, 220)), (12, 12 + idx * 20))
+
+    if show_perf_meter:
+        budget_ratio = physics_ms_ema / 16.67
+        if budget_ratio < 0.25:
+            perf_label, perf_color = "VERY FAST", (120, 255, 140)
+        elif budget_ratio < 0.60:
+            perf_label, perf_color = "GOOD", (180, 255, 120)
+        elif budget_ratio < 1.00:
+            perf_label, perf_color = "OK", (255, 220, 120)
+        else:
+            perf_label, perf_color = "HEAVY", (255, 120, 120)
+
+        meter_x, meter_y = 12, HEIGHT - 30
+        meter_w, meter_h = 260, 12
+        fill_ratio = float(np.clip(budget_ratio, 0.0, 1.5)) / 1.5
+        pygame.draw.rect(screen, (50, 50, 60), (meter_x, meter_y, meter_w, meter_h), border_radius=6)
+        pygame.draw.rect(screen, perf_color, (meter_x, meter_y, int(meter_w * fill_ratio), meter_h), border_radius=6)
+        perf_text = f"Fortran: {perf_label} | planets: {active_planets:,} | {physics_ms_ema:.3f}ms"
+        screen.blit(font.render(perf_text, True, perf_color), (12, HEIGHT - 54))
 
     frame_ms = clock.get_time()
     if frame_ms_ema is None:
@@ -118,8 +151,7 @@ while True:
     else:
         frame_ms_ema = (0.9 * frame_ms_ema) + (0.1 * float(frame_ms))
     fps = clock.get_fps()
-    physics_pct = (physics_ms_ema / max(frame_ms_ema, 1e-6)) * 100.0
     pygame.display.set_caption(
-        f"orbit | Fortran | solve: {physics_ms_ema:.2f}ms | frame: {frame_ms_ema:.2f}ms | {physics_pct:.0f}% | FPS: {fps:.1f}")
+        f"orbit | Fortran | planets: {active_planets:,} | solve: {physics_ms_ema:.2f}ms | frame: {frame_ms_ema:.2f}ms | FPS: {fps:.1f}")
     pygame.display.flip()
     clock.tick(TARGET_FPS)
