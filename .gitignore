@@ -1,6 +1,6 @@
 # Python cache
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
 
 # Build outputs — uncomment if you want to exclude compiled binaries from git
