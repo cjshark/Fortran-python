@@ -1,0 +1,16 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Build outputs — uncomment if you want to exclude compiled binaries from git
+# build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+*.swp
