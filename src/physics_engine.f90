@@ -23,7 +23,7 @@ subroutine verlet_step(pos, vel, acc, dt, n)
 
 end subroutine verlet_step
 
-subroutine resolve_collisions(pos, vel, n, radius)
+subroutine resolve_collisions(pos, vel, n, radi us)
     implicit none
     !f2py intent(in) :: n, radius
     !f2py intent(inout) :: vel
